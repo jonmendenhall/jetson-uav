@@ -9,7 +9,7 @@ from colorama import Fore, Style
 
 def gstreamer_pipeline(capture_size=(1280, 720), display_size=(1280, 720), framerate=60, flip_method=0):
     return (
-        'nvarguscamerasrc ! '
+        'nvarguscamerasrc exposuretimerange="10000000 10000000" tnr-strength=1 tnr-mode=2 ee-strength=0.5 aeantibanding=0 maxperf=true ! '
         'video/x-raw(memory:NVMM), '
         'width=%d, height=%d, '
         'format=NV12, framerate=%d/1 ! '
@@ -95,8 +95,10 @@ def main():
             cal_data = None
 
         print('Capturing...')
-        cap = cv2.VideoCapture(0)
-        # cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
+        print(Fore.YELLOW + 'Press [Spacebar] to save the current image for calculation later.')
+        print('Press [Esc] to exit.' + Style.RESET_ALL)
+        # cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
 
         if cap.isOpened():
             while True:
