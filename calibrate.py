@@ -54,11 +54,7 @@ def main():
             img = cv2.imread(img_name)
             img_grey = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-            ret, corners = cv2.findChessboardCorners(img_grey, chessboard, None)
-            # if ret:
-            #     corners2 = cv2.cornerSubPix(img_grey, corners, (3, 3), (-1, -1), (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01))
-
-            # cv2.drawChessboardCorners(img, chessboard, corners, ret)
+            ret, corners = cv2.findChessboardCorners(img_grey, chessboard, None)       
 
             print(img_name, ret)
             if ret:
@@ -67,11 +63,6 @@ def main():
             else:
                 print(Fore.RED + f'No chessboard found... deleting image' + Style.RESET_ALL)
                 os.remove(img_name)
-
-            # cv2.imshow('Capture', img)
-            # key = cv2.waitKey(1)
-            # if key == 27:
-            #     break
         
         if len(obj_pts) > 0:
             print('Calculating calibration...')
@@ -97,9 +88,8 @@ def main():
         print('Capturing...')
         print(Fore.YELLOW + 'Press [Spacebar] to save the current image for calculation later.')
         print('Press [Esc] to exit.' + Style.RESET_ALL)
-        # cap = cv2.VideoCapture(0)
-        cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
 
+        cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
         if cap.isOpened():
             while True:
                 _, img = cap.read()
