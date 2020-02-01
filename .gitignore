@@ -3,3 +3,4 @@ jetson-capture
 calibration.pkl
 workspace.code-workspace
 test.py
+gcs/tiles

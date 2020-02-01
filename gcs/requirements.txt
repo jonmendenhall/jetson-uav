@@ -1,0 +1,4 @@
+PyQt5 == 5.12.0
+PyQtWebEngine == 5.12.0
+pymavlink
+pyserial

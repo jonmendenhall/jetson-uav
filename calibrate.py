@@ -105,7 +105,7 @@ def main():
                 elif key == 32:
                     # when [Spacebar] pressed, save the current frame to the disk
 
-                    # find next available image filename based on number: 1.png, 2.png, 3.png, d=...
+                    # find next available image filename based on number: 1.png, 2.png, 3.png, ...
                     while True:
                         img_name = f'{capture_path}/{capture_num}.png'
                         if not os.path.exists(img_name):

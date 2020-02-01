@@ -84,8 +84,8 @@ class App:
             return
 
         # load YOLOv3 network and weights needed for object detection
-        net = load_net('eagleeye.cfg', 'eagleeye.weights', 0)
-        meta = load_meta('eagleeye.data')
+        net = load_net('model/eagleeye.cfg', 'model/eagleeye.weights', 0)
+        meta = load_meta('model/eagleeye.data')
 
         # open the video capture pipeline using a gstreamer pipeline string
         pipeline = gstreamer_pipeline(capture_size=(1280, 720), display_size=(1280, 720), framerate=60, flip_method=0        
@@ -145,6 +145,10 @@ class App:
                         # approximate lattitude and longitude by extending the object's vector from the location and altitude of the UAV down to the ground
                         obj_lat = location.lat + location.alt * (ned_vec[0] / ned_vec[2]) * DEGREES_PER_METER
                         obj_lon = location.lon + location.alt * (ned_vec[1] / ned_vec[2]) * DEGREES_PER_METER
+
+                        msg = self.vehicle.message_factory.command_int_encode(255, 25, 0, 31000, 0, 0, 0.1, 0, 0, 0, int(obj_lat * 1e7), int(obj_lon * 1e7), 0)
+                        self.vehicle.send_mavlink(msg)
+                        # print(probability, obj_lat, obj_lon)
 
             except KeyboardInterrupt:
                 break
