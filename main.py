@@ -94,10 +94,12 @@ class App:
     def run(self):
         
         if self.args.record:
+            print('[Capture mode]')
             
             # setup recording variables
             record_num = 1
             is_recording = False
+            recording_t0 = None
             self.running = True
 
             while self.running:
@@ -147,13 +149,18 @@ class App:
                     heading = self.vehicle.heading
                     attitude = self.vehicle.attitude
                     
+                    if recording_t0 is None:
+                        recording_t0 = time.time()
+
                     # write data to telemetry file with ';' delimeter
-                    data_line = f'{time.time():.3f};{location.lat};{location.lon};{location.alt};{heading};{attitude.roll:.3f};{attitude.pitch:.3f}'
+                    data_line = f'{time.time()-recording_t0:.3f};{location.lat};{location.lon};{location.alt};{heading};{attitude.roll:.3f};{attitude.pitch:.3f}'
                     self.telemetry_file.write(data_line + '\n')
                     time.sleep(0.1)
                 else:
                     time.sleep(0.1)
         else:
+            
+            print('[Detection mode]')
 
             caldata_path = 'calibration.pkl'
 

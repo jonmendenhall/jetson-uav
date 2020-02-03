@@ -6,3 +6,4 @@ calibration.pkl
 workspace.code-workspace
 test.py
 gcs/tiles
+post_annotate.py
