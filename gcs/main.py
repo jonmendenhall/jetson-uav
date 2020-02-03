@@ -1,11 +1,18 @@
 from PyQt5 import QtCore, QtGui, QtWidgets, QtWebEngineWidgets
 from pymavlink.dialects.v20 import ardupilotmega as mavlink
+
 import serial
 import serial.tools.list_ports
 import socket
 import time
 import os
 
+
+# status messages sent from the Jetson Nano
+STATUS_RECORDING_START = b'REC_START'
+STATUS_RECORDING_STOP = b'REC_STOP'
+STATUS_DETECTION_START = b'DET_START'
+STATUS_DETECTION_STOP = b'DET_STOP'
 
 # subclass QWebEnginePage so I can route console.log statements to STDOUT
 class WebPage(QtWebEngineWidgets.QWebEnginePage):
@@ -77,6 +84,7 @@ class SocketThread(QtCore.QThread):
 
                 # notify of the received data if there is any
                 self.received_data.emit(data)
+                time.sleep(0.001)
         
         # close the TCP connection and socket server when the thread should be stopped
         if self.conn is not None:
@@ -123,6 +131,7 @@ class SerialThread(QtCore.QThread):
                     # get a buffer of data from the port, then emit the received data via the signal
                     data = self.ser.read(50)
                     self.received_data.emit(data)
+                    time.sleep(0.001)
                 except:
                     pass
         
@@ -153,11 +162,16 @@ class MAVThread(QtCore.QThread):
                 if msg is not None:
                     # notify listeners with the message when it is parsed
                     self.parsed_message.emit(msg)
+                time.sleep(0.001)
             except:
                 continue
 
 
-# creates and manages the main window and all threads
+
+
+
+
+# creates and manages the main window
 class MainApp(QtWidgets.QWidget):
     def __init__(self):
         super(QtWidgets.QWidget, self).__init__()
@@ -191,6 +205,8 @@ class MainApp(QtWidgets.QWidget):
         # create the MAVLink thread and connect the function to handle parsed messages
         self.mav_thread = MAVThread()
         self.mav_thread.parsed_message.connect(self.on_mav_message)
+        self.vehicle_armed = False
+        # self.vehicle = None
     
     # called by each thread when it is started, to notify if it was successful, and any error if there was one 
     def on_thread_started(self, thread, success, error):
@@ -233,37 +249,58 @@ class MainApp(QtWidgets.QWidget):
     
     # called when a TCP connection sends data (QGroundControl trying to send data to the UAV)
     def on_socket_data(self, data):
-        # route the data directly to the telemetry radio via the serial thread
+        # route the data to the telemetry radio via the serial thread
         self.serial_thread.write(data)
     
     # called when data is received from the serial port (UAV sending data to QGroundControl)
     def on_serial_data(self, data):
-        # route the data directly to the TCP connection via the socket thread
-        self.socket_thread.write(data)
-
-        # also route the data to the MAVLink thread to parse messages 
+        # route the data to the MAVLink thread to parse messages 
         self.mav_thread.extend_buffer(data)
 
     # called when the MAVLink thread parses a message from the telemetry datastream
-    def on_mav_message(self, msg):
-        if msg.name == 'GLOBAL_POSITION_INT':
-            # the message contains the location of the UAV
+    def on_mav_message(self, msg): 
+        # handle heartbeat messages from the UAV to check if armed / disarmed
+        if msg.name == 'HEARTBEAT' and msg.autopilot != 8:
+            armed = (msg.base_mode >> 7 & 1) == 1
+            if armed != self.vehicle_armed:
+                self.vehicle_armed = armed
+                if armed:
+                    # clear markers and flight path when arming
+                    self.page.runJavaScript(f'clearFlightPathPoints();')
+                    self.page.runJavaScript(f'clearDetectionMarkers();')
+
+        # show status messages for recording / detection
+        elif msg.name == 'STATUSTEXT' and msg.get_srcComponent() == 30:
+            print(f'[Jetson Nano] {msg.text}')
+
+            # do not pass message to QGroundControl
+            return
+
+        # the message contains the location of the UAV
+        elif msg.name == 'GLOBAL_POSITION_INT':
             lat = msg.lat / 1e7
             lon = msg.lon / 1e7
             print(f'Lat: {lat}, Lon: {lon}, Rel Alt: {msg.relative_alt / 1e3}, Heading: {msg.hdg / 1e2}')
             
             # add the current location to the flight path on the map
-            self.page.runJavaScript(f'addFlightPathPoint({lat}, {lon});')
-        
-        elif msg.name == 'COMMAND_INT' and msg.target_component != self.mav.srcComponent:
-            # the message contains data from the object detection code sent by the Jetson Nano
-            if msg.command == 31000:
-                # unpack the detection result from the message
-                probability, lat, lon = msg.param1, msg.x, msg.y
-                print(f'[Detector]: {probability:.1%} LAT: {lat * 1e-7}, LON: {lon * 1e-7}')
+            if self.vehicle_armed:
+                self.page.runJavaScript(f'addFlightPathPoint({lat}, {lon});')
 
-                # place a marker for the detection result on the map
-                self.page.runJavaScript(f'addDetectionMarker({probability}, {lat}, {lon});')
+        # the message contains data from the object detection code sent by the Jetson Nano
+        elif msg.name == 'COMMAND_INT' and msg.command == 31000:
+            # unpack the detection result from the message
+            probability, lat, lon = msg.param1, msg.x * 1e-7, msg.y * 1e-7
+            print(f'[Detector]: {probability:.1%} LAT: {lat}, LON: {lon * 1e-7}')
+
+            # place a marker for the detection result on the map
+            self.page.runJavaScript(f'addDetectionMarker({probability}, {lat}, {lon});')
+            
+            # do not pass message to QGroundControl
+            return
+
+        # # route message to the TCP connection via the socket thread
+        self.socket_thread.write(msg.get_msgbuf())    
+                
 
     # create widget to hold all configuration widgets
     def init_config_panel(self):

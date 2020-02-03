@@ -45,3 +45,8 @@ def gstreamer_pipeline(capture_size=(1280, 720), display_size=(1280, 720), frame
         'video/x-raw, format=BGR ! appsink'
         % (*capture_size, framerate, flip_method, *display_size)
     )
+
+if __name__ == '__main__':
+    pt = np.array([0, 0, 1])
+    cam_transform = matrix_rot_x(np.radians(-50))
+    print(pt @ cam_transform)

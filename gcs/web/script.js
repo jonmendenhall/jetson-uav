@@ -30,7 +30,6 @@ function clearFlightPathPoints() {
 
 
 // the detection layer will hold many markers that represent the location of objects detected by the Jetson Nano
-var detectionMarkers = []
 var detectionLayer = L.layerGroup()
 detectionLayer.addTo(map)
 
@@ -51,8 +50,12 @@ function addDetectionMarker(probability, lat, lon) {
     })
 
     // add marker to the detectionLayer to show on the map
-    detectionMarkers.push(marker)
     detectionLayer.addLayer(marker)
+}
+
+// remove all detection markers from the map
+function clearDetectionMarkers() {
+    detectionLayer.clearLayers()
 }
 
 
