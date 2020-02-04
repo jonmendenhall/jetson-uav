@@ -33,9 +33,9 @@ def matrix_rot_z(theta):
     ])
 
 # generate a gstreamer pipeline string for video capture
-def gstreamer_pipeline(capture_size=(1280, 720), display_size=(1280, 720), framerate=60, flip_method=0):
+def gstreamer_pipeline(capture_size=(1280, 720), display_size=(1280, 720), framerate=60, flip_method=2):
     return (
-        'nvarguscamerasrc exposuretimerange="10000000 10000000" tnr-strength=1 tnr-mode=2 ee-strength=0.5 aeantibanding=0 maxperf=true ! '
+        'nvarguscamerasrc exposuretimerange="10000000 10000000" maxperf=true ! '
         'video/x-raw(memory:NVMM), '
         'width=%d, height=%d, '
         'format=NV12, framerate=%d/1 ! '

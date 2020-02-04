@@ -1,9 +1,10 @@
+import cv2
+import numpy as np
 from dronekit import connect
 from dronekit.mavlink import MAVConnection
 from darknet import *
 from util import *
 
-import cv2
 import time
 import subprocess
 import signal
@@ -68,7 +69,7 @@ class App:
     def start_video_capture(self, file_name):
         if self.record_process is None:
             # create a gstreamer process to write to the mp4 file 'file_name'
-            self.record_process = subprocess.Popen(['gst-launch-1.0', '-e', 'nvarguscamerasrc', 'exposuretimerange="10000000 10000000"', 'tnr-strength=1', 'tnr-mode=2', 'ee-strength=0.5', '!' ,'video/x-raw(memory:NVMM),width=1280,height=720,format=NV12,framerate=30/1', '!', 'nvvidconv', 'flip-method=0', '!', 'x264enc', 'speed-preset=3', '!', 'mp4mux', '!', 'filesink', f'location={file_name}'], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+            self.record_process = subprocess.Popen(['gst-launch-1.0', '-e', 'nvarguscamerasrc', 'exposuretimerange="10000000 10000000"', 'maxperf=true', '!' ,'video/x-raw(memory:NVMM),width=1280,height=720,format=NV12,framerate=30/1', '!', 'nvvidconv', 'flip-method=2', '!', 'x264enc', 'speed-preset=3', '!', 'mp4mux', '!', 'filesink', f'location={file_name}'], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
             while True:
                 try:
                     # wait for the video stream to be set to 'PLAYING'
@@ -95,6 +96,10 @@ class App:
         
         if self.args.record:
             print('[Capture mode]')
+
+            # set to 10W mode so video capture is smooth to mp4
+            # will not brown own because capture is less intensive than
+            subprocess.call(['nvpmodel', '-m0'])
             
             # setup recording variables
             record_num = 1
@@ -153,7 +158,7 @@ class App:
                         recording_t0 = time.time()
 
                     # write data to telemetry file with ';' delimeter
-                    data_line = f'{time.time()-recording_t0:.3f};{location.lat};{location.lon};{location.alt};{heading};{attitude.roll:.3f};{attitude.pitch:.3f}'
+                    data_line = f'{time.time()-recording_t0:.3f};{int(location.lat*1e7)};{int(location.lon*1e7)};{location.alt};{heading};{np.degrees(attitude.roll):.3f};{np.degrees(attitude.pitch):.3f}'
                     self.telemetry_file.write(data_line + '\n')
                     time.sleep(0.1)
                 else:
@@ -161,6 +166,9 @@ class App:
         else:
             
             print('[Detection mode]')
+            
+            # set Jetson to 5W mode so the Dev kit does not draw too much power and brownout
+            subprocess.call(['nvpmodel', '-m1'])
 
             caldata_path = 'calibration.pkl'
 
