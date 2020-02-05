@@ -239,9 +239,7 @@ class App:
                     for obj in objs:
                         classifier, probability, bbox = obj
                         x, y, w, h = bbox
-                        center_x = (x + w / 2) * img_w
-                        center_y = (y + h / 2) * img_h
-                        pts.append([center_x, center_y])
+                        pts.append([x, y])
 
                     # only do the undistortion and transformation calculations if there were any objects detected
                     # to speed up the detection loop
@@ -255,7 +253,7 @@ class App:
                         
                         # calculate transformation matrix to orient points in the camera in a North-East-Down reference frame
                         # corrects for roll, pitch, and heading of the UAV
-                        mat_transform = matrix_rot_y(attitude.roll) @ matrix_rot_x(-attitude.pitch - CAM_MOUNT_ANGLE) @ matrix_rot_z(-(90 + heading) * pi / 180)
+                        mat_transform = matrix_rot_y(attitude.roll) @ matrix_rot_x(-attitude.pitch - CAM_MOUNT_ANGLE * pi / 180) @ matrix_rot_z(-(90 + heading) * pi / 180)
 
                         for i, obj in enumerate(objs):
                             classifier, probability, bbox = obj

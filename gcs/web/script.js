@@ -3,7 +3,7 @@ var map = L.map('map').setView([35.781736, -81.338296], 15)
 
 // create a tilelayer to display the Google maps sattelite view
 var tileLayer = L.tileLayer('https://{s}.google.com/vt/lyrs=s&?x={x}&y={y}&z={z}', {
-    maxZoom: 20,
+    maxZoom: 22,
     subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
 })
 tileLayer.addTo(map)

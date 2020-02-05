@@ -6,7 +6,7 @@ import argparse
 import time
 import pickle
 import os
-from main.py import CAM_MOUNT_ANGLE
+from main import CAM_MOUNT_ANGLE
 
 def main():
     parser = argparse.ArgumentParser()
@@ -14,6 +14,7 @@ def main():
     parser.add_argument('video_file', help='path for file with live video saved from record process')
     parser.add_argument('output_file', help='path for annoted video output')
     parser.add_argument('-preview', action='store_true', help='show preview while annotating video')
+    parser.add_argument('-location_file', help='path for file to write detected object locations')
     args = parser.parse_args()
 
     caldata_path = 'calibration.pkl'
@@ -61,7 +62,14 @@ def main():
 
     # create video output
     print(f'creating output to {args.output_file}')
-    writer = cv2.VideoWriter(args.output_file, cv2.VideoWriter_fourcc(*'mp4v'), 25, (1280, 720))
+    # put black borders around video so detection results can show still show at edges
+    padding = 60
+    writer = cv2.VideoWriter(args.output_file, cv2.VideoWriter_fourcc(*'mp4v'), 25, (1280 + padding * 2, 720 + padding * 2))
+
+    # create location file if specified in args
+    if args.location_file is not None:
+        print(f'creating output to {args.location_file}')
+        output_loc = open(args.location_file, 'w')
 
     # load YOLOv3 network and weights needed for object detection
     print('loading darknet model')
@@ -84,6 +92,10 @@ def main():
 
             # get frame size
             img_w, img_h = frame.shape[1], frame.shape[0]
+
+            # create padded image
+            frame_padded = np.zeros((img_h + padding * 2, img_w + padding * 2, 3), dtype=np.uint8)
+            frame_padded[padding:-padding, padding:-padding] = frame
             
             # get the timestamp of this frame relative to the start of the video
             frame_time = capture.get(cv2.CAP_PROP_POS_MSEC) / 1000
@@ -95,9 +107,15 @@ def main():
             frame_telem = telemetry[telem_i]
 
             print(f'[{frame_i+1}/{frame_count}] Frame Time: {frame_time:.3f} | Latest Telem: {frame_telem["timestamp"]:.3f}')
-
-            # run YOLOv3 detection on the frame using the model loaded at startup
-            objs = detect(net, meta, frame, thresh=0.6)
+           
+            # increment frame counter
+            frame_i += 1
+            
+            if frame_i > 100:
+                # run YOLOv3 detection on the frame using the model loaded at startup
+                objs = detect(net, meta, frame, thresh=0.6)
+            else:
+                objs = []
 
             # list of center points of all objects detected
             pts = []
@@ -106,9 +124,7 @@ def main():
             for obj in objs:
                 classifier, probability, bbox = obj
                 x, y, w, h = bbox
-                center_x = (x + w / 2) * img_w
-                center_y = (y + h / 2) * img_h
-                pts.append([center_x, center_y])
+                pts.append([x, y])
 
             # only do the undistortion and transformation calculations if there were any objects detected
             # to speed up the detection loop
@@ -119,17 +135,17 @@ def main():
                 
                 # generate a vector from the focal point to the camera plane for each detected object (x,y,z = right,back,down) relative to the UAV
                 obj_vectors = np.hstack((pts_undist, np.ones((pts_undist.shape[0], 1))))
-                
+
                 # calculate transformation matrix to orient points in the camera in a North-East-Down reference frame
                 # corrects for roll, pitch, and heading of the UAV
-                mat_transform = matrix_rot_y(frame_telem['roll']) @ matrix_rot_x(-frame_telem['pitch'] - CAM_MOUNT_ANGLE) @ matrix_rot_z(-(90 + frame_telem['heading']) * pi / 180)
+                mat_transform = matrix_rot_y(frame_telem['roll'] * pi / 180) @ matrix_rot_x((-frame_telem['pitch'] - CAM_MOUNT_ANGLE) * pi / 180) @ matrix_rot_z(-(90 + frame_telem['heading']) * pi / 180)
 
                 for i, obj in enumerate(objs):
                     classifier, probability, bbox = obj
-                    x = int(bbox[0])
-                    y = int(bbox[1])
                     w = int(bbox[2])
                     h = int(bbox[3])
+                    x = int(bbox[0] - bbox[2] / 2 + padding)
+                    y = int(bbox[1] - bbox[3] / 2 + padding)
                     obj_vec = obj_vectors[i]
 
                     # transform the vector toward the object to be in a North-East-Down reference frame relative to the UAV
@@ -140,7 +156,7 @@ def main():
                     obj_lon = frame_telem['lon'] + frame_telem['alt']  * (ned_vec[1] / ned_vec[2]) * DEGREES_PER_METER
 
                     # draw rectangle around detected object
-                    cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 255), 2)
+                    cv2.rectangle(frame_padded, (x, y), (x + w, y + h), (255, 0, 255), 2)
 
                     # set text style for annotations above objects
                     text_scale = 0.6
@@ -156,23 +172,24 @@ def main():
                     line_spacing = 6
                     
                     # draw box to surround all lines of text for this object's annotations
-                    cv2.rectangle(frame, (x, y - (len(lines) * line_height + (len(lines) + 1) * line_spacing)), (x + max_line_width, y), (255, 0, 255), -1)
+                    cv2.rectangle(frame_padded, (x, y - (len(lines) * line_height + (len(lines) + 1) * line_spacing)), (x + max_line_width, y), (255, 0, 255), -1)
                     
                     # draw each line of text (bottom to top)
                     for l_i, line in enumerate(lines):
-                        cv2.putText(frame, line, (x, y - l_i * (line_height + line_spacing) - line_spacing), cv2.FONT_HERSHEY_SIMPLEX, text_scale, (0, 0, 0), text_thickness, cv2.LINE_AA)
+                        cv2.putText(frame_padded, line, (x, y - l_i * (line_height + line_spacing) - line_spacing), cv2.FONT_HERSHEY_SIMPLEX, text_scale, (0, 0, 0), text_thickness, cv2.LINE_AA)
 
-                    
-
-            # increment frame counter
-            frame_i += 1
+                    if args.location_file is not None:
+                        output_loc.write(f'{frame_i};{frame_time:.3f};{probability:.4f};{int(obj_lat*1e10)};{int(obj_lon*1e10)}\n')
             
+            if args.location_file is not None:
+                output_loc.flush()
+
             # write annotated frame to output
-            writer.write(frame)
+            writer.write(frame_padded)
             
             # show preview if run with flag
             if args.preview: 
-                cv2.imshow(args.video_file, frame)
+                cv2.imshow(args.video_file, frame_padded)
                 key = cv2.waitKey(1)
                 if key == 27:
                     break
@@ -183,6 +200,8 @@ def main():
     # close input and output video streams
     writer.release()    
     capture.release()
+    if args.location_file is not None:
+        output_loc.close()
     cv2.destroyAllWindows()
     
 
